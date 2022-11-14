@@ -8,8 +8,7 @@ log = logging.getLogger(__name__)
 
 extensions = (
     'bot.core',
-    'bot.profitability',
-    'bot.sticky_embed',
+    'bot.dungen.cog',
 )
 
 def bot_task_callback(future: asyncio.Future):
@@ -17,7 +16,7 @@ def bot_task_callback(future: asyncio.Future):
         raise future.exception()
 
 
-async def run_bot():
+async def entry_point():
     token = os.environ['TOKEN']
     intents = discord.Intents.all()
     intents.message_content = True
@@ -27,24 +26,19 @@ async def run_bot():
         command_prefix='!',
         slash_commands=True,
     )
-    try:
-        for ext in extensions:
-            await bot.load_extension(ext)
-            log.debug(f"Extension {ext} loaded")
+    async with bot:
+        try:
+            for ext in extensions:
+                await bot.load_extension(ext)
+                log.debug(f"Extension {ext} loaded")
 
-        await bot.start(token)
-    finally:
-        await bot.close()
+            await bot.start(token)
+        finally:
+            await bot.close()
 
-loop = asyncio.new_event_loop()
+
 try:
-    future = asyncio.ensure_future(
-        run_bot(),
-        loop=loop
-    )
-    future.add_done_callback(bot_task_callback)
-    loop.run_forever()
+    asyncio.run(entry_point())
 except KeyboardInterrupt:
     pass
-finally:
-    loop.close()
+

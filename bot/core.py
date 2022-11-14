@@ -1,13 +1,15 @@
+from __future__ import annotations
 import logging
 import textwrap
-from typing import Optional, Literal
+from typing import Optional, Literal, Any, Union
 
 import discord
 from discord import app_commands, Interaction
 from discord.ext import commands
-from discord.ext.commands import Context, Greedy
+from discord.ext.commands import Greedy, Context
 
 log = logging.getLogger(__name__)
+
 
 class CoreCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -58,6 +60,9 @@ class CoreCog(commands.Cog):
             else:
                 ret += 1
         await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
+
+
+
 
 
 async def setup(bot: commands.Bot):
