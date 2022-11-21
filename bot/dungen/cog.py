@@ -10,10 +10,10 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from bot.dungen.schema import DungenAPIRequest
-from bot.dungen.services import generate_dungeon, make_map_embed
+from bot.dungen.services import generate_dungeon, make_map_embed, PATREON_URL
 from bot.dungen.components.views import DungenGenerateView, CaveGeneratedView
 from . import choices
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from bot.bot import DungenBot
@@ -40,7 +40,7 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
                 timeout=None
             )
         await itx.response.send_message(
-            embed=self.map_embed,
+            embed=self.map_embed(title="New Map Generator"),
             view=view
         )
         message = await itx.original_response()
@@ -60,7 +60,7 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
                 timeout=None
         )
         await itx.response.send_message(
-            embed=self.map_embed,
+            embed=self.map_embed(title="New Cave Generator"),
             view=view
         )
         message = await itx.original_response()
@@ -70,12 +70,17 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
             await view.update_persistent_view(db.connection)
 
 
-    @property
-    def map_embed(self):
-        desc =  textwrap.dedent("""
-        Use the below options to generate your own Dungeon. All seeds are random by default.
+    def map_embed(self, title: Optional[str] = None, description: Optional[str] = None):
+        desc = description or textwrap.dedent(f"""
+        Use the below options and then click Generate. All seeds are random by default.
+        Make sure to check out our [patreon]({PATREON_URL}) for some awesome perks.
         """)
-        embed = discord.Embed(title="Generate New Embed", description=desc)
+        title = title or "New Generator"
+        embed = discord.Embed(title=title, description=desc)
+        embed.set_author(
+            name="Dungeon Channel", url=PATREON_URL,
+            icon_url="https://dungeonchannel.com/mainimages/patreon/Patreon_Coral.jpg"
+        )
         return embed
 
     async def _handle_create_cmd(self, itx: Interaction, size: int, theme: str, tile_size: int):
