@@ -2,44 +2,73 @@ from __future__ import annotations
 
 import logging
 import textwrap
+from datetime import timedelta
 
 import discord
 from discord import Interaction
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from bot.dungen.schema import DungenAPIRequest
-from bot.dungen.services import generate_dungeon, make_dungeon_embed
-from bot.dungen.views import DungenGenerateView, CaveGeneratedView
+from bot.dungen.services import generate_dungeon, make_map_embed
+from bot.dungen.components.views import DungenGenerateView, CaveGeneratedView
 from . import choices
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from bot.bot import DungenBot
 log = logging.getLogger(__name__)
 
 
 class DungeonCog(commands.GroupCog, group_name='dungeon'):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: DungenBot, expire_views_timedelta: timedelta = timedelta(minutes=1)):
         self.bot = bot
+        self.bot.persistent_views
+    async def expire_views_task(self):
+        pass
+    @app_commands.command(name='testing')
+    async def testing_cmd(self, itx: Interaction):
+        await itx.response.defer(thinking=True)
+        await itx.followup.edit_message(itx.message.id, content="bar")
 
     @app_commands.command(name='map')
     async def map_cmd(self, itx: Interaction):
-        await itx.response.send_message(
-            embed=self.map_embed,
-            view=DungenGenerateView(
+        view = DungenGenerateView(
+                bot=self.bot,
                 theme_options=choices.DUNGEN_THEME_OPTIONS,
                 size_options=choices.DUNGEON_SIZE_OPTIONS,
+                timeout=None
             )
+        await itx.response.send_message(
+            embed=self.map_embed,
+            view=view
         )
+        message = await itx.original_response()
+        message = await message.fetch()
+        view.message = message
+        async with self.bot.db as db:
+            await view.update_persistent_view(db.connection)
+
 
     @app_commands.command(name='cave')
     async def cave_cmd(self, itx: Interaction):
-        await itx.response.send_message(
-            embed=self.map_embed,
-            view=CaveGeneratedView(
+        view = CaveGeneratedView(
+                bot=self.bot,
                 theme_options=choices.CAVE_THEME_OPTIONS,
                 size_options=choices.CAVE_SIZE_OPTIONS,
-                default_egress="1"
-            )
+                default_egress="1",
+                timeout=None
         )
+        await itx.response.send_message(
+            embed=self.map_embed,
+            view=view
+        )
+        message = await itx.original_response()
+        message = await message.fetch()
+        view.message = message
+        async with self.bot.db as db:
+            await view.update_persistent_view(db.connection)
+
 
     @property
     def map_embed(self):
@@ -58,9 +87,9 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
             tile_size=tile_size
         )
         dungen_response = await generate_dungeon(req)
-        embed = make_dungeon_embed(dungen_response)
+        embed = make_map_embed(dungen_response)
         await itx.followup.send(embed=embed)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: DungenBot):
     await bot.add_cog(DungeonCog(bot))
