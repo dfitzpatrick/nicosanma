@@ -30,12 +30,12 @@ class DungenBot(commands.Bot):
     db: Pg
     patreon_polling: PatreonPoller
     task_debounce: TaskDebounce
+
     def __init__(self, **kwargs):
         super(DungenBot, self).__init__(**kwargs)
 
-
     async def setup_hook(self) -> None:
-        self.db = await Pg.create_tables(os.environ['DSN'], database_name='nicodb', migrations_path=migrations)
+        self.db = await Pg.create_tables(os.environ['DSN'], database_name=config_constants.PRODUCTION_DATABASE_NAME, migrations_path=migrations)
         self.patreon_polling = PatreonPoller(self.db, interval=1)
         self.task_debounce = TaskDebounce()
         async with self.db as db:
@@ -45,7 +45,6 @@ class DungenBot(commands.Bot):
         for view in self.persistent_views:
             if hasattr(view, 'reschedule_timeout_task'):
                 view.reschedule_timeout_task()
-
 
     def find_partial_message_from_db(self, record: Dict[str, Any]) -> Optional[discord.PartialMessage]:
         guild_id = record['guild_id']

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+
 class CallbackModal(ui.Modal):
     def __init__(self, callback: Callable, validation_failed = False, **kwargs):
         super(CallbackModal, self).__init__(**kwargs)
@@ -36,6 +37,7 @@ class EgressModal(CallbackModal, title="Change Egress"):
             return value in range(0, 10) or value in map(float, range(0, 10))
         except (ValueError, TypeError):
             return False
+
 
 class SeedModal(ui.Modal, title='Change Seed'):
 

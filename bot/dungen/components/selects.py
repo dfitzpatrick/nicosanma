@@ -17,10 +17,9 @@ class MultiBooleanSelect(ui.Select):
             self._values.append(opt.value)
 
     async def callback(self, itx: discord.Interaction) -> None:
-        log.debug("select clicked")
         self.reset_defaults()
         await itx.response.defer()
-        log.debug("select deferred")
+
 
     def to_dict(self):
         result = {}

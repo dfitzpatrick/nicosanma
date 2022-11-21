@@ -1,22 +1,20 @@
 from __future__ import annotations
 
+import logging
 import uuid
+from typing import TYPE_CHECKING, Type, Callable
 
 import discord
 from discord import ui
-from typing import TYPE_CHECKING, Type, Callable
 
-from bot.dungen.schema import CaveAPIRequest
 from bot.dungen.services import patreon_embed
 from .modals import CallbackModal
-import logging
-
-from .. import config_constants
 
 if TYPE_CHECKING:
-    from .views import DungenGenerateView, GeneratedMapView, CaveGeneratedView
+    from .views import GeneratedMapView
 
 log = logging.getLogger(__name__)
+
 
 class GenerateButton(ui.Button):
 
@@ -74,17 +72,22 @@ class UpscaleButton(ui.Button):
                 count = await db.connection.fetchval(sql, discord_id)
         if self.always_allow or count > 0:
             view.tile_size = 140
-            embed = await view.generate()
-            if view.message:
-                async with view.bot.db as db:
-                    await view.update_persistent_view(db.connection)
+
             if view.regenerated:
+                await itx.response.defer()
+                embed = await view.generate()
                 await itx.followup.edit_message(itx.message.id, embed=embed, view=view.as_new_view())
             else:
-                await itx.followup.send(embed=embed, view=view.as_new_view())
+                await itx.response.defer(thinking=True)
+                embed = await view.generate()
+                view = view.as_new_view(custom_id_prefix=str(uuid.uuid4()))
+                await itx.followup.send(embed=embed, view=view)
+                message = await itx.original_response()
+                view.message = message
+            async with view.bot.db as db:
+                await view.update_persistent_view(db.connection)
         else:
             await itx.followup.send(embed=patreon_embed(color=discord.Color.red()), ephemeral=True)
-
 
 
 class CallbackModalButton(ui.Button):

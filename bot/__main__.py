@@ -14,12 +14,32 @@ extensions = (
     'bot.dungen.cog',
 )
 
-def bot_task_callback(future: asyncio.Future):
-    if future.exception():
-        raise future.exception()
+
+class MissingConfigurationException(Exception):
+    pass
+
+
+def assert_envs_exist():
+    envs = (
+        ('TOKEN', 'The Bot Token', str),
+        ('DSN', 'The DSN Connection String for Postgresql without the database. Ex: postgresql://postgres:postgres@localhost:5434 ', str),
+        ('PATREON_TOKEN', 'Patreon Creators Token for Background Tasks', str),
+    )
+
+    for e in envs:
+        ident = f"{e[0]}/{e[1]}"
+        value = os.environ.get(e[0])
+        if value is None:
+            raise MissingConfigurationException(f"{ident} needs to be defined")
+        try:
+            _ = e[2](value)
+        except ValueError:
+            raise MissingConfigurationException(f"{ident} is not the required type of {e[2]}")
 
 
 async def entry_point():
+    assert_envs_exist()
+
     pool = asyncpg.create_pool(os.environ['DSN'])
     token = os.environ['TOKEN']
     intents = discord.Intents.all()

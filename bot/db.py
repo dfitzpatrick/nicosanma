@@ -10,7 +10,6 @@ ctx_connection = ContextVar("ctx_connection")
 ctx_transaction = ContextVar("ctx_transaction")
 
 
-
 async def create_db(dsn: str, database_name: str, owner: str):
     conn = await asyncpg.connect(dsn + "/template1")
     try:
@@ -19,6 +18,7 @@ async def create_db(dsn: str, database_name: str, owner: str):
     except asyncpg.DuplicateDatabaseError:
         await conn.close()
         log.debug(f"Skipped Database Creation. {database_name} already created.")
+
 
 class DbProxy:
     """For later expansion"""
@@ -30,7 +30,6 @@ class DbProxy:
 
 
 class Pg:
-
 
     @classmethod
     async def create_tables(cls, dsn: str, database_name: str, migrations_path: pathlib.Path):
@@ -50,8 +49,6 @@ class Pg:
 
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
-
-
 
     async def __aenter__(self) -> DbProxy:
         self._conn = await self.pool.acquire()

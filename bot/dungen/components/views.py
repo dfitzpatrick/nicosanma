@@ -1,26 +1,26 @@
 from __future__ import annotations
-from typing import Optional, List, Union, TYPE_CHECKING
+
+import logging
+from typing import Optional, List, TYPE_CHECKING
 
 import discord
 from discord import ui
+
+from bot.dungen import choices
 from bot.dungen.choices import CAVE_MAP_STYLE_OPTIONS
 from bot.dungen.components.buttons import GenerateButton, CallbackModalButton
 from bot.dungen.components.generic import GeneratedMapView
 from bot.dungen.components.modals import EgressModal, DensityModal
 from bot.dungen.components.selects import MultiBooleanSelect, SingleSelect
-from bot.dungen import choices
-import logging
-
-
 from bot.dungen.schema import DungenAPIRequest, CaveAPIRequest, CaveSerialized, MapSerializeable
 from bot.dungen.services import generate_dungeon, make_map_embed, generate_cave, make_cave_embed
+
 if TYPE_CHECKING:
     from bot.bot import DungenBot
 
 log = logging.getLogger(__name__)
 
 class DungenGenerateView(GeneratedMapView):
-
 
     def __init__(self,
                  bot: DungenBot,
@@ -83,7 +83,6 @@ class DungenGenerateView(GeneratedMapView):
             message=self.message,
             **other
         )
-
 
 
 class CaveGeneratedView(GeneratedMapView):
@@ -200,3 +199,4 @@ class CaveGeneratedView(GeneratedMapView):
             message=self.message,
             **other
         )
+    

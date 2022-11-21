@@ -10,7 +10,6 @@ from discord.ext.commands import Greedy, Context
 
 log = logging.getLogger(__name__)
 
-
 class CoreCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -23,6 +22,10 @@ class CoreCog(commands.Cog):
             """For further help, use /cmd and see the hints that discord provides
 
             **Available Commands**
+            /dungen map  -- Generates a new Map session
+            /dungen cave -- Generates a new Cave session
+            
+            
           
         """)
         embed = discord.Embed(title=title, description=description)

@@ -3,35 +3,28 @@ from __future__ import annotations
 import logging
 import textwrap
 from datetime import timedelta
+from typing import TYPE_CHECKING, Optional
 
 import discord
 from discord import Interaction
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
+from bot.dungen.components.views import DungenGenerateView, CaveGeneratedView
 from bot.dungen.schema import DungenAPIRequest
 from bot.dungen.services import generate_dungeon, make_map_embed, PATREON_URL
-from bot.dungen.components.views import DungenGenerateView, CaveGeneratedView
 from . import choices
-from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from bot.bot import DungenBot
 log = logging.getLogger(__name__)
 
 
-class DungeonCog(commands.GroupCog, group_name='dungeon'):
+class DungeonCog(commands.GroupCog, group_name='dungen'):
     def __init__(self, bot: DungenBot, expire_views_timedelta: timedelta = timedelta(minutes=1)):
         self.bot = bot
-        self.bot.persistent_views
-    async def expire_views_task(self):
-        pass
-    @app_commands.command(name='testing')
-    async def testing_cmd(self, itx: Interaction):
-        await itx.response.defer(thinking=True)
-        await itx.followup.edit_message(itx.message.id, content="bar")
 
-    @app_commands.command(name='map')
+    @app_commands.command(name='map', description="Starts a new Map Generator session with DunGen")
     async def map_cmd(self, itx: Interaction):
         view = DungenGenerateView(
                 bot=self.bot,
@@ -49,8 +42,7 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
         async with self.bot.db as db:
             await view.update_persistent_view(db.connection)
 
-
-    @app_commands.command(name='cave')
+    @app_commands.command(name='cave', description="Starts a new Cave Generator session with DunGen")
     async def cave_cmd(self, itx: Interaction):
         view = CaveGeneratedView(
                 bot=self.bot,
@@ -68,7 +60,6 @@ class DungeonCog(commands.GroupCog, group_name='dungeon'):
         view.message = message
         async with self.bot.db as db:
             await view.update_persistent_view(db.connection)
-
 
     def map_embed(self, title: Optional[str] = None, description: Optional[str] = None):
         desc = description or textwrap.dedent(f"""
