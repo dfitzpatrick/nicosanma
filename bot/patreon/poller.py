@@ -33,14 +33,14 @@ class MemberConnection(TypedDict):
 
 class PatreonPoller:
 
-    def __init__(self, pg: Pg, interval: int = 10):
+    def __init__(self, pg: Pg, interval: int = 25):
         self.interval = interval
         self.pg = pg
         self.poller = tasks.loop(minutes=interval, reconnect=True)(self.poller)
 
-    async def start(self):
+    def start(self):
         log.info(f"Patreon Polling started. {self.interval} minute intervals")
-        await self.poller.start()
+        self.poller.start()
 
     def stop(self):
         log.info("Patreon Polling stopped")

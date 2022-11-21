@@ -36,8 +36,9 @@ class DungenBot(commands.Bot):
 
     async def setup_hook(self) -> None:
         self.db = await Pg.create_tables(os.environ['DSN'], database_name=config_constants.PRODUCTION_DATABASE_NAME, migrations_path=migrations)
-        self.patreon_polling = PatreonPoller(self.db, interval=1)
+        self.patreon_polling = PatreonPoller(self.db, interval=config_constants.PATREON_POLLING_MINUTES)
         self.task_debounce = TaskDebounce()
+        self.patreon_polling.start()
         async with self.db as db:
             records = await db.connection.fetch("select * from discord_persistent_views")
         records = await self.cleanup_persistent_views(records)

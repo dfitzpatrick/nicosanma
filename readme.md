@@ -9,6 +9,7 @@ Example: DSN=postgresql://postgres:postgres@localhost:5434
 ### Optional Environment Variables
 `PRODUCTION_DATABASE_NAME` - Postgresql Database Name for Regular Operations (Defaults to nicodb)
 
+`PATREON_POLLING_MINUTES` - Number of Minutes Between Polling Patreon. Defaults to 25.
 
 `DB_HOST` - Postgresql Host for Running Tests Only
 
