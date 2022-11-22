@@ -4,6 +4,7 @@ import os
 from discord.ext import commands
 import asyncio
 import logging
+from dotenv import load_dotenv
 
 from bot.bot import DungenBot
 
@@ -38,6 +39,7 @@ def assert_envs_exist():
 
 
 async def entry_point():
+    load_dotenv()
     assert_envs_exist()
 
     pool = asyncpg.create_pool(os.environ['DSN'])
