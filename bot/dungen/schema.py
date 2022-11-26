@@ -14,6 +14,7 @@ class ViewSerializable(BaseModel):
     download_url: Optional[str] = None
     seed_editable: bool = True
     regenerated: bool = False
+    user_id: Optional[int] = None
 
 
 class MapSerializeable(ViewSerializable):
@@ -25,7 +26,7 @@ class CaveSerialized(ViewSerializable):
     default_egress: Optional[str] = None
     default_density: Optional[str] = None
     default_secret_rooms: Optional[List[str]] = None
-
+    theme_applied: bool = False
 
 
 class GeneratedAPIRequest(BaseModel):
@@ -44,7 +45,7 @@ class CaveAPIRequest(GeneratedAPIRequest):
     map_style: str
     corridor_density: float = 0
     egress: float = 1.0
-
+    layout: bool = True
 
 
 class GeneratedAPIResponse(BaseModel):
@@ -65,12 +66,25 @@ class GeneratedAPIResponse(BaseModel):
         return self.file_size + "MB"
 
     @property
+    def tile_size(self):
+        # Parse strings to get max tile size (pixel size / max_tile_size
+        try:
+            pixel_size = int(self.pixel_size.split()[0])
+            max_size = int(self.max_tile_size.split()[0])
+            tile_size = pixel_size / max_size
+            return f"{tile_size:.0f}px grid"
+        except (ValueError, TypeError):
+            return "Unknown px Grid"
+
+
+    @property
     def max_tile_size_fmt(self):
-        return self.max_tile_size + " px grid"
+        return f"{self.max_tile_size} ({self.tile_size})"
 
 
 class DungenAPIResponse(GeneratedAPIResponse):
     pass
+
 
 class CaveAPIResponse(GeneratedAPIResponse):
     pass

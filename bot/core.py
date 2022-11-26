@@ -65,8 +65,5 @@ class CoreCog(commands.Cog):
         await ctx.send(f"Synced the tree to {ret}/{len(guilds)}.")
 
 
-
-
-
 async def setup(bot: commands.Bot):
     await bot.add_cog(CoreCog(bot))

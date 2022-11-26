@@ -1,9 +1,11 @@
 from __future__ import annotations
+
+import logging
 from typing import Callable, TYPE_CHECKING
 
 import discord
 from discord import ui
-import logging
+
 if TYPE_CHECKING:
     from bot.dungen.components.generic import GeneratedMapView
 
@@ -55,11 +57,11 @@ class SeedModal(ui.Modal, title='Change Seed'):
 
 
 class DensityModal(CallbackModal, title='Change Corridor Density'):
-    density = ui.TextInput(label="Enter a value 0, 0.1, 0.2 .. 1 in even tenths")
+    density = ui.TextInput(label="Enter Density between 0 and 10")
 
     def validate(self) -> bool:
         try:
-            value = float(self.density.value)
-            return value in [0.0, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.0]
+            value = int(self.density.value)
+            return value in range(11)
         except (ValueError, TypeError):
             return False

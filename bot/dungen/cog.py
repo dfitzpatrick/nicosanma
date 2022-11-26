@@ -87,5 +87,6 @@ class DungeonCog(commands.GroupCog, group_name='dungen'):
         await itx.followup.send(embed=embed)
 
 
+
 async def setup(bot: DungenBot):
     await bot.add_cog(DungeonCog(bot))

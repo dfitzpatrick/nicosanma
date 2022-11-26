@@ -1,6 +1,6 @@
 from __future__ import annotations
-import asyncio
-from abc import ABC
+
+import logging
 from datetime import datetime
 from typing import List, Optional, Union, TYPE_CHECKING
 from uuid import uuid4
@@ -14,14 +14,11 @@ from bot.dungen.components.buttons import UpscaleButton
 from bot.dungen.components.modals import SeedModal
 from bot.dungen.components.selects import SingleSelect
 from bot.dungen.services import update_persistant_view, text_timedelta
-import logging
+
 if TYPE_CHECKING:
     from bot.bot import DungenBot
 
 log = logging.getLogger(__name__)
-
-
-
 
 
 class GeneratedMapView(ui.View):
@@ -40,18 +37,23 @@ class GeneratedMapView(ui.View):
                  seed: str = "random",
                  seed_editable=True,
                  regenerated=False,
+                 user_id: Optional[int] = None,
                  **kwargs
                  ):
 
         super(GeneratedMapView, self).__init__(**kwargs)
         self.designation = 'generic'
+        self.user_id = user_id
+        log.debug(f"User Id is {self.user_id}")
         self.message = message
         self.bot = bot
         self.download_url = download_url
         self.custom_id_prefix = custom_id_prefix
+        self.regenerated = regenerated
         self.theme_select = SingleSelect(
             theme_options,
-            default_value=default_theme,
+            placeholder="Select Theme",
+            default_value=default_theme if self.regenerated else None,
             custom_id=f"{custom_id_prefix}_generated_map_theme"
         )
         self.size_select = SingleSelect(
@@ -61,7 +63,7 @@ class GeneratedMapView(ui.View):
         )
         self.seed = seed
         self.tile_size = tile_size
-        self.regenerated = regenerated
+
         self.seed_button = ui.Button(
             label=f"Change Seed ({self.seed.capitalize()})",
             style=discord.ButtonStyle.blurple,
@@ -75,7 +77,7 @@ class GeneratedMapView(ui.View):
 
         btn_upscale = UpscaleButton(
             always_allow=False,
-            label="Upscale (Patreon)",
+            label="Upscale",
             style=discord.ButtonStyle.red,
             row=4,
             custom_id=f"{custom_id_prefix}_generated_map_upscale"
@@ -85,13 +87,18 @@ class GeneratedMapView(ui.View):
 
         if seed_editable:
             self.add_item(self.seed_button)
-        if download_url:
-            self.add_item(ui.Button(
-                label="Download",
-                url=download_url,
-                row=4,
+
+    async def interaction_check(self, itx: discord.Interaction) -> bool:
+        result = self.user_id is None or self.user_id == itx.user.id
+
+        if not result:
+            embed = discord.Embed(
+                title="Uh Oh!",
+                description=f"This particular Map/Cave isn't meant for you.",
+                color=discord.Color.red()
             )
-            )
+            await itx.response.send_message(embed=embed, ephemeral=True)
+        return result
 
     async def seed_button_callback(self, itx: discord.Interaction):
         await itx.response.send_modal(SeedModal(self))
@@ -121,11 +128,17 @@ class GeneratedMapView(ui.View):
         async with self.bot.db as db:
             await self.expire_persistent_view(db.connection)
 
-    async def expire_persistent_view(self, connection: asyncpg.Connection):
+    async def remove_persistence(self):
         sql = """
-        delete from discord_persistent_views
-        where view_payload->>'custom_id_prefix' = $1;
-        """
+                delete from discord_persistent_views
+                where view_payload->>'custom_id_prefix' = $1;
+                """
+        async with self.bot.db as db:
+            await db.connection.execute(sql, self.custom_id_prefix)
+        log.debug(f"Persistence removed from {self.custom_id_prefix}")
+
+    async def expire_persistent_view(self, connection: asyncpg.Connection):
+        await self.remove_persistence()
         log.debug(f"Expiring view {self.custom_id_prefix}")
         log.debug(self.message)
         for child in self.children:
@@ -134,9 +147,6 @@ class GeneratedMapView(ui.View):
                 child.disabled = True
         if self.message is not None:
             await self.message.edit(view=self)
-
-        async with self.bot.db as db:
-            await db.connection.execute(sql, self.custom_id_prefix)
         self.stop()
 
     def reschedule_timeout_task(self, target: Optional[datetime] = None):

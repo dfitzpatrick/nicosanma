@@ -1,27 +1,28 @@
 from __future__ import annotations
 
+import json
+import logging
+import random
 import re
 from datetime import timedelta
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any
 
 import aiohttp
 import asyncpg
 import discord
-import random
-import json
 from pydantic import BaseModel
 
-from bot.dungen.schema import DungenAPIRequest, DungenAPIResponse, CaveAPIRequest, CaveAPIResponse, GeneratedAPIRequest, \
-    GeneratedAPIResponse
-import logging
+from bot.dungen.schema import DungenAPIRequest, DungenAPIResponse, CaveAPIRequest, CaveAPIResponse, GeneratedAPIResponse
+from . import config_constants
 
 log = logging.getLogger(__name__)
 
 PATREON_URL = "https://www.patreon.com/DungeonChannel"
 
 
-async def generate(req: BaseModel, target_url: str) -> Dict[str, Any]:
-    payload = req.json()
+async def generate(req: BaseModel, target_url: str, exclude_seed: bool = False) -> Dict[str, Any]:
+    excludes = {'seed'} if exclude_seed else set()
+    payload = req.json(exclude=excludes)
     headers = {"Content-Type": "application/json"}
     log.debug(f"Calling Post to {target_url} headers={headers}")
     log.debug(f"Payload: {req}")
@@ -38,9 +39,9 @@ async def generate_dungeon(req: DungenAPIRequest) -> DungenAPIResponse:
     return DungenAPIResponse(**response)
 
 
-async def generate_cave(req: CaveAPIRequest) -> CaveAPIResponse:
+async def generate_cave(req: CaveAPIRequest, exclude_seed: bool = False) -> CaveAPIResponse:
     target = "https://dungen.app/api/cave/"
-    response = await generate(req, target)
+    response = await generate(req, target, exclude_seed=exclude_seed)
     return CaveAPIResponse(**response)
 
 
@@ -55,8 +56,8 @@ def make_response_embed(title: str, dungen_response: GeneratedAPIResponse, **kwa
     ], [5, 2, 1, 1, 15, 5])[0]
     log.debug(dungen_response.full_image_url)
     embed = discord.Embed(title=title, description=patreon_choice)
-    embed.set_author(name="Dungeon Channel", url=PATREON_URL,
-                     icon_url="https://dungeonchannel.com/mainimages/patreon/Patreon_Coral.jpg")
+    embed.set_author(name=config_constants.SERVICE_NAME, url=config_constants.PATREON_URL,
+                     icon_url=config_constants.SERVICE_ICON)
     embed.set_image(url=dungen_response.full_image_url)
     embed.add_field(name="Map Size", value=dungen_response.max_tile_size_fmt, inline=True)
     embed.add_field(name="File Size", value=dungen_response.file_size_fmt, inline=True)
@@ -79,6 +80,7 @@ def patreon_embed(*, title=None, description=None, **kwargs):
     default_description = f"Get access to all the best features by becoming a [Patreon Member]({PATREON_URL}) today."
     embed = discord.Embed(title=title or default_title, description=description or default_description, **kwargs)
     return embed
+
 
 async def update_persistant_view(conn: asyncpg.Connection, designation: str, message: discord.Message, view_state: Dict[str, Any]):
     payload = json.dumps(view_state)
@@ -115,3 +117,5 @@ def text_timedelta(text: str) -> Optional[timedelta]:
         return
     args = {k: int(v) for k, v in matches.groupdict().items() if v and v.isdigit()}
     return timedelta(**args)
+
+
