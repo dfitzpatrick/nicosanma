@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -96,7 +97,10 @@ class DungenBot(commands.Bot):
         async with self.db as db:
             sql = "delete from discord_persistent_views where id = $1;"
             for v in expired:
+                log.debug(f"Cleanup is expiring unused view {v.custom_id_prefix}")
                 await v.expire_persistent_view(db.connection)
+                # Prevent rate limits
+                await asyncio.sleep(2)
             for record in not_found:
                 log.debug(f"Removing Persistent View Record of {record['id']}")
                 await db.connection.execute(sql, record['id'])

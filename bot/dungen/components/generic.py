@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Union, TYPE_CHECKING
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ import discord
 from discord import ui
 
 from bot.dungen import config_constants
-from bot.dungen.components.buttons import UpscaleButton
+from bot.dungen.components.buttons import UpscaleButton, FinalizeButton
 from bot.dungen.components.modals import SeedModal
 from bot.dungen.components.selects import SingleSelect
 from bot.dungen.services import update_persistant_view, text_timedelta
@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 class GeneratedMapView(ui.View):
     message: Optional[Union[discord.Message, discord.PartialMessage]] = None
+    result_embed_cache: Optional[discord.Embed] = None
 
     def __init__(self,
                  bot: DungenBot,
@@ -36,15 +37,23 @@ class GeneratedMapView(ui.View):
                  tile_size: int = config_constants.TILE_SIZE_REGULAR,
                  seed: str = "random",
                  seed_editable=True,
+                 seed_edited=False,
                  regenerated=False,
                  user_id: Optional[int] = None,
+                 guild_id: Optional[int] = None,
+                 finalized: bool = False,
+                 upscaled: bool = False,
                  **kwargs
                  ):
-
+        log.debug(f"Sending kwargs to super {kwargs}")
         super(GeneratedMapView, self).__init__(**kwargs)
-        self.designation = 'generic'
+        log.debug(f"Timeout is now {self.timeout}")
+        if getattr(self, 'designation') is None:
+            self.designation = 'generic'
         self.user_id = user_id
-        log.debug(f"User Id is {self.user_id}")
+        self.guild_id = guild_id
+        self.upscaled = upscaled
+        self.finalized = finalized
         self.message = message
         self.bot = bot
         self.download_url = download_url
@@ -61,7 +70,11 @@ class GeneratedMapView(ui.View):
             default_value=default_size,
             custom_id=f"{custom_id_prefix}_generated_map_size"
         )
-        self.seed = seed
+        self.seed_edited = seed_edited
+        if self.regenerated or self.seed_edited:
+            self.seed = seed
+        else:
+            self.seed = self.default_seed
         self.tile_size = tile_size
 
         self.seed_button = ui.Button(
@@ -75,18 +88,61 @@ class GeneratedMapView(ui.View):
         self.add_item(self.theme_select)
         self.add_item(self.size_select)
 
+        if self.regenerated:
+            self.btn_upscale = self.add_upscale_button()
+
+        if seed_editable and not self.regenerated:
+            log.debug(f"Seed editable: {seed_editable}")
+            log.debug(f"Regenerated: {self.regenerated}")
+            self.add_item(self.seed_button)
+
+    def add_upscale_button(self):
+        label = "Upscale & Finalize"
         btn_upscale = UpscaleButton(
             always_allow=False,
-            label="Upscale",
+            label=label,
             style=discord.ButtonStyle.red,
             row=4,
-            custom_id=f"{custom_id_prefix}_generated_map_upscale"
+            custom_id=f"{self.custom_id_prefix}_generated_{self.designation}_upscale",
+            pre_hook=self.on_upscale
         )
-        if self.regenerated:
-            self.add_item(btn_upscale)
+        self.add_item(btn_upscale)
+        return btn_upscale
 
-        if seed_editable:
-            self.add_item(self.seed_button)
+    def handle_finalized(self):
+        if self.finalized and self.download_url:
+            self.remove_children()
+            if not self.upscaled:
+                self.add_upscale_button()
+            self.add_item(ui.Button(
+                label="Download",
+                url=self.download_url,
+                row=4,
+            ))
+
+
+    async def send_public_embed(self):
+        if self.message is None or self.message.channel is None:
+            raise AttributeError("Message/Channel is not found")
+        embed: discord.Embed = self.result_embed_cache or await self.generate(finalize=True)
+        if self.user_id and self.guild_id:
+            guild = self.bot.get_guild(self.guild_id)
+            if guild is not None:
+                member = guild.get_member(self.user_id)
+                if member is not None:
+                    embed.set_footer(text=f"Created by {member.display_name}", icon_url=member.display_avatar.url)
+        embed.timestamp = datetime.now(timezone.utc)
+        channel = self.message.channel
+        view = self.as_new_view()
+        # Always send finished state
+        view.finalized = True
+        view.upscaled = True
+
+        await channel.send(embed=embed, view=view.as_new_view())
+
+    def remove_children(self):
+        for child in self.children:
+            self.remove_item(child)
 
     async def interaction_check(self, itx: discord.Interaction) -> bool:
         result = self.user_id is None or self.user_id == itx.user.id
@@ -103,14 +159,21 @@ class GeneratedMapView(ui.View):
     async def seed_button_callback(self, itx: discord.Interaction):
         await itx.response.send_modal(SeedModal(self))
 
+    @property
+    def default_seed(self):
+        return NotImplementedError
+
     def to_dict(self):
         raise NotImplementedError
 
     def as_new_view(self, **extras):
         raise NotImplementedError
 
-    async def generate(self):
+    async def generate(self, finalize: bool = False):
         raise NotImplementedError
+
+    async def on_upscale(self, interaction: discord.Interaction, button: FinalizeButton):
+        pass
 
     async def update_persistent_view(self, connection: asyncpg.Connection):
         log.debug(f"Attempting to update persistent view {self.custom_id_prefix}")

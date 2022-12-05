@@ -13,8 +13,13 @@ class ViewSerializable(BaseModel):
     default_size: Optional[str] = None
     download_url: Optional[str] = None
     seed_editable: bool = True
+    seed_edited: bool = False
     regenerated: bool = False
     user_id: Optional[int] = None
+    guild_id: Optional[int] = None
+    finalized: bool = False
+    upscaled: bool = False
+
 
 
 class MapSerializeable(ViewSerializable):
@@ -34,6 +39,7 @@ class GeneratedAPIRequest(BaseModel):
     theme: str
     max_size: int
     tile_size: int
+    discord_id: str
 
 
 class DungenAPIRequest(GeneratedAPIRequest):

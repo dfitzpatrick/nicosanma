@@ -37,7 +37,15 @@ CAVE_EGRESS_OPTIONS = [
 CAVE_OTHER_OPTIONS = [
     discord.SelectOption(label="Remove Un-Connected Rooms", value="secret_rooms")
 ]
-DUNGEON_SIZE_OPTIONS = [discord.SelectOption(label=c.name, value=str(c.value)) for c in DUNGEON_SIZE_CHOICES]
+DUNGEON_SIZE_OPTIONS = [
+    discord.SelectOption(label='(Size) Mini', value='4'),
+    discord.SelectOption(label='(Size) Tiny', value='6'),
+    discord.SelectOption(label='(Size) Small', value='16'),
+    discord.SelectOption(label='(Size) Medium', value='40', default=True),
+    discord.SelectOption(label='(Size) Large', value='80'),
+    discord.SelectOption(label='(Size) Huge', value='120'),
+]
+
 DUNGEON_MAP_OPTIONS = [
     discord.SelectOption(label="Multi-level", value="multi_level"),
     discord.SelectOption(label="Special Rooms", value="trap"),

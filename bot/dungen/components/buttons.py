@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Type, Callable
+from typing import TYPE_CHECKING, Type, Callable, Optional
 
 import aiohttp
 import discord
 from discord import ui
 
-from bot.dungen import config_constants
 from bot.dungen.services import patreon_embed
 from .modals import CallbackModal
+from .. import config_constants
 from ..cooldown import DungenCooldown
 
 if TYPE_CHECKING:
-    from .views import GeneratedMapView
+    from .views import GeneratedMapView, CaveGeneratedView
 log = logging.getLogger(__name__)
 
 dungen_cooldown = DungenCooldown()
@@ -44,16 +44,18 @@ class GenerateButton(ui.Button):
         Parameters
         """
         view: GeneratedMapView = self.view
-
+        new_view = None
+        log.debug("In GenerateButton callback")
         try:
             view.user_id = itx.user.id
+            view.guild_id = itx.guild_id
             log.debug(f"View now belongs to {view.user_id}")
             if view.regenerated:
-                await itx.response.defer()
+                await itx.response.defer(ephemeral=config_constants.USE_EPHEMERAL)
                 embed = await view.generate()
                 await itx.followup.edit_message(itx.message.id, embed=embed, view=view.as_new_view())
             else:
-                await itx.response.defer(thinking=True)
+                await itx.response.defer(thinking=True, ephemeral=config_constants.USE_EPHEMERAL)
                 embed = await view.generate()
                 view = view.as_new_view(custom_id_prefix=str(uuid.uuid4()))
 
@@ -68,7 +70,46 @@ class GenerateButton(ui.Button):
                 await view.update_persistent_view(db.connection)
 
 
-class UpscaleButton(GenerateButton):
+class FinalizeButton(GenerateButton):
+
+    def __init__(self, pre_hook: Optional[Callable] = None, **kwargs):
+        self.pre_hook = pre_hook
+        super(FinalizeButton, self).__init__(**kwargs)
+
+    async def callback(self, itx: discord.Interaction):
+        if self.pre_hook is not None:
+            await self.pre_hook(itx, self)
+        log.debug("In FinalizeButton callback")
+        view: GeneratedMapView = self.view
+        view.finalized = True
+        log.debug("Calling FInalize super")
+        await super(FinalizeButton, self).callback(itx)
+        log.debug(f"Ephemeral status is {config_constants.USE_EPHEMERAL}")
+        if config_constants.USE_EPHEMERAL:
+            log.debug("Sending public embed")
+            await view.send_public_embed()
+
+        # Although the view exists possibly for upscaling, stop tracking here.
+        await view.remove_persistence()
+
+
+class CaveFinalizeButton(FinalizeButton):
+
+    async def callback(self, itx: discord.Interaction):
+        view: CaveGeneratedView = self.view
+
+        for item in view.children:
+            # Disable so they can see the settings still
+            item.disabled = True
+        await view.message.edit(embed=view.applying_theme_embed, view=view)
+        view.theme_applied = True
+        view.finalized = True
+
+        log.debug("Calling super")
+        await super(CaveFinalizeButton, self).callback(itx)
+
+
+class UpscaleButton(FinalizeButton):
 
     def __init__(self, always_allow: bool = False, **kwargs):
         emoji = discord.PartialEmoji.from_str("patreon_w:1045163802745905193")
@@ -96,33 +137,22 @@ class UpscaleButton(GenerateButton):
         return count > 0
 
     async def callback(self, itx: discord.Interaction):
+        log.debug("In UpscaleButton callback")
         view: GeneratedMapView = self.view
-        view.user_id = itx.user.id
-        log.debug(f"View now belongs to {view.user_id}")
+        can_upscale = await self.can_upscale(str(itx.user.id))
+        if not can_upscale:
+            await itx.response.send_message(embed=patreon_embed(color=discord.Color.red()), ephemeral=True)
+            return
         try:
-            # In order to catch the right message object
-            await itx.response.defer(thinking=False if view.regenerated else True)
-            can_upscale = await self.can_upscale(str(itx.user.id))
-            if not can_upscale:
-                await itx.followup.send(embed=patreon_embed(color=discord.Color.red()), ephemeral=True)
-                return
+            if self.pre_hook is not None:
+                await self.pre_hook(itx, self)
+            view.upscaled = True
             view.tile_size = 140
-            if view.regenerated:
-                view.user_id = itx.user.id
-                embed = await view.generate()
-                await itx.followup.edit_message(itx.message.id, embed=embed, view=view.as_new_view())
-            else:
-                embed = await view.generate()
-                view = view.as_new_view(custom_id_prefix=str(uuid.uuid4()))
-                await itx.followup.send(embed=embed, view=view)
-                message = await itx.original_response()
-                view.message = message
+            await super(UpscaleButton, self).callback(itx)
         except aiohttp.ClientResponseError:
             view.tile_size = 70
-            await itx.followup.send(embed=client_error_embed(), ephemeral=True)
-        finally:
-            async with view.bot.db as db:
-                await view.update_persistent_view(db.connection)
+            view.upscaled = False
+            await itx.response.send_message(embed=client_error_embed(), ephemeral=True)
 
 
 class CallbackModalButton(ui.Button):

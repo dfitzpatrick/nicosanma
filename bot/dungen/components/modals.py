@@ -52,6 +52,7 @@ class SeedModal(ui.Modal, title='Change Seed'):
 
     async def on_submit(self, itx: discord.Interaction):
         self.view.seed = self.seed.value
+        self.view.seed_edited = True
         self.view.seed_button.label = f"Change Seed ({self.seed.value.capitalize()})"
         await itx.response.edit_message(view=self.view)
 

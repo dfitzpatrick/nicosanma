@@ -1,5 +1,5 @@
 import os
-
+USE_EPHEMERAL = os.environ.get('USE_EPHEMERAL', 'True').lower() == 'true'
 TILE_SIZE_REGULAR = os.environ.get('TILE_SIZE_REGULAR', 70)
 TILE_SIZE_HQ = os.environ.get('TILE_SIZE_HQ', 140)
 VIEW_TIMEOUT = os.environ.get('VIEW_TIMEOUT', '1d')

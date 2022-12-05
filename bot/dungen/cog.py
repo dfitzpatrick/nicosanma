@@ -13,7 +13,7 @@ from discord.ext import commands
 from bot.dungen.components.views import DungenGenerateView, CaveGeneratedView
 from bot.dungen.schema import DungenAPIRequest
 from bot.dungen.services import generate_dungeon, make_map_embed, PATREON_URL
-from . import choices
+from . import choices, config_constants
 
 if TYPE_CHECKING:
     from bot.bot import DungenBot
@@ -32,13 +32,18 @@ class DungeonCog(commands.GroupCog, group_name='dungen'):
                 size_options=choices.DUNGEON_SIZE_OPTIONS,
                 timeout=None
             )
+        log.debug(f"View Timeout in cog is {view.timeout}")
         await itx.response.send_message(
             embed=self.map_embed(title="New Map Generator"),
-            view=view
+            view=view,
+            ephemeral=config_constants.USE_EPHEMERAL
         )
+        log.debug(f"View Timeout in cog is {view.timeout}")
         message = await itx.original_response()
-        message = await message.fetch()
+        #await message.fetch()
+        log.debug(f"Map command has message of {message}")
         view.message = message
+        view.timeout = None
         async with self.bot.db as db:
             await view.update_persistent_view(db.connection)
 
@@ -53,11 +58,12 @@ class DungeonCog(commands.GroupCog, group_name='dungen'):
         )
         await itx.response.send_message(
             embed=self.map_embed(title="New Cave Generator"),
-            view=view
+            view=view,
+            ephemeral=config_constants.USE_EPHEMERAL
         )
         message = await itx.original_response()
-        message = await message.fetch()
         view.message = message
+        view.timeout = None
         async with self.bot.db as db:
             await view.update_persistent_view(db.connection)
 
@@ -75,7 +81,7 @@ class DungeonCog(commands.GroupCog, group_name='dungen'):
         return embed
 
     async def _handle_create_cmd(self, itx: Interaction, size: int, theme: str, tile_size: int):
-        await itx.response.defer(thinking=True)
+        await itx.response.defer(thinking=True, ephemeral=config_constants.USE_EPHEMERAL)
         req = DungenAPIRequest(
             seed="random",
             theme=theme,

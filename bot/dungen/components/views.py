@@ -10,7 +10,8 @@ from discord import ui
 
 from bot.dungen import choices, config_constants
 from bot.dungen.choices import CAVE_MAP_STYLE_OPTIONS
-from bot.dungen.components.buttons import GenerateButton, CallbackModalButton
+from bot.dungen.components.buttons import GenerateButton, CallbackModalButton, FinalizeButton, CaveFinalizeButton, \
+    UpscaleButton
 from bot.dungen.components.generic import GeneratedMapView
 from bot.dungen.components.modals import EgressModal, DensityModal
 from bot.dungen.components.selects import MultiBooleanSelect, SingleSelect
@@ -32,9 +33,8 @@ class DungenGenerateView(GeneratedMapView):
                  default_map_options: Optional[List[str]] = None,
                  **kwargs
                  ):
-        super(DungenGenerateView, self).__init__(bot, theme_options, size_options, **kwargs)
         self.designation = "map"
-
+        super(DungenGenerateView, self).__init__(bot, theme_options, size_options, **kwargs)
         btn_label = "Edit Map" if self.regenerated else "Generate Map"
 
         self.map_options = MultiBooleanSelect(
@@ -49,27 +49,38 @@ class DungenGenerateView(GeneratedMapView):
             custom_id=f"{self.custom_id_prefix}_generated_map_generate_btn",
             row=4
         )
+        self.btn_finalize = FinalizeButton(
+            label="Finalize",
+            style=discord.ButtonStyle.red,
+            custom_id=f"{self.custom_id_prefix}_generated_map_finalize_btn",
+            row=4
+        )
         self.add_item(self.map_options)
-        if self.download_url:
-            self.add_item(ui.Button(
-                label="Download",
-                url=self.download_url,
-                row=4,
-            ))
         self.add_item(self.btn_generate)
+        if self.regenerated:
+            self.add_item(self.btn_finalize)
 
-    async def generate(self):
+        self.handle_finalized()
+
+    @property
+    def default_seed(self):
+        return "random"
+
+    async def generate(self, finalize: bool = False):
         req = DungenAPIRequest(
             seed=self.seed,
             theme=self.theme_select.value,
             max_size=self.size_select.value,
             tile_size=self.tile_size,
+            discord_id=str(self.user_id),
             **self.map_options.to_dict()
         )
         dungen_response = await generate_dungeon(req)
-        self.seed = dungen_response.seed_string
-        self.download_url = dungen_response.full_image_url
-        embed = make_map_embed(dungen_response)
+        if self.regenerated:
+            self.seed = dungen_response.seed_string
+            self.download_url = dungen_response.full_image_url
+        embed = make_map_embed(dungen_response, finalized=finalize)
+        self.result_embed_cache = embed
         return embed
 
     def to_dict(self):
@@ -82,8 +93,13 @@ class DungenGenerateView(GeneratedMapView):
             tile_size=self.tile_size,
             seed=self.seed,
             seed_editable=False,
+            seed_edited=self.seed_edited,
             regenerated=True,
             user_id=self.user_id,
+            guild_id=self.guild_id,
+            finalized=self.finalized,
+            upscaled=self.upscaled,
+
         ).dict()
 
     def as_new_view(self, **extras):
@@ -111,8 +127,11 @@ class CaveGeneratedView(GeneratedMapView):
                  default_density: Optional[str] = None,
                  theme_applied: bool = False,
                  **kwargs):
-        super(CaveGeneratedView, self).__init__(bot, theme_options, size_options, seed=seed, **kwargs)
         self.designation = "cave"
+        super(CaveGeneratedView, self).__init__(bot, theme_options, size_options, seed=seed, **kwargs)
+        if not self.regenerated:
+            # reset the seed
+            self.seed = ""
         self.theme_applied = theme_applied
         self.density = default_density or "0"
         self.egress = default_egress or "1"
@@ -166,29 +185,38 @@ class CaveGeneratedView(GeneratedMapView):
                 custom_id=f"{self.custom_id_prefix}_cave_generate"
             ))
         if self.regenerated:
-            btn_apply = ui.Button(
+            self.btn_finalize = CaveFinalizeButton(
                 label="Apply Theme",
                 style=discord.ButtonStyle.red,
-                custom_id=f"{self.custom_id_prefix}_cave_apply"
+                custom_id=f"{self.custom_id_prefix}_generated_map_finalize_btn",
+                row=4
             )
-            btn_apply.callback = partial(self.on_apply_theme, button=btn_apply)
-            self.add_item(btn_apply)
-        if self.theme_applied:
-            # Remove all components
-            for item in self.children:
-                self.remove_item(item)
-            if self.download_url:
-                self.add_item(ui.Button(
-                    label="Download",
-                    url=self.download_url,
-                    row=4,
-                ))
+            #self.btn_finalize.callback = partial(self.on_apply_theme, button=self.btn_finalize)
+            self.add_item(self.btn_finalize)
+
+        self.handle_finalized()
+
+    @property
+    def default_seed(self):
+        return ""
 
     @property
     def density_display(self):
         if self.density != "0":
             return Decimal(self.density) / Decimal('0.1')
         return "0"
+
+    def add_upscale_button(self):
+        btn_upscale = UpscaleButton(
+            always_allow=False,
+            label="Upscale (& Apply Theme)",
+            style=discord.ButtonStyle.red,
+            row=4,
+            custom_id=f"{self.custom_id_prefix}_generated_cave_upscale",
+            pre_hook=self.on_upscale
+        )
+        self.add_item(btn_upscale)
+        return btn_upscale
 
     async def on_density_change(self, itx: discord.Interaction, modal: DensityModal):
         self.density = str(int(modal.density.value) * Decimal('0.1'))
@@ -200,20 +228,19 @@ class CaveGeneratedView(GeneratedMapView):
         self.egress_btn.label = f"Egress ({self.egress})"
         await itx.response.edit_message(view=self)
 
-    async def on_apply_theme(self, itx: discord.Interaction, button: ui.Button):
-        await itx.response.defer()
+    async def on_upscale(self, itx: discord.Interaction, button: FinalizeButton):
+        await self.on_apply_theme(itx, button)
 
+    async def on_apply_theme(self, itx: discord.Interaction, button: FinalizeButton):
+        log.debug("In apply theme")
         for item in self.children:
             # Disable so they can see the settings still
             item.disabled = True
         await self.message.edit(embed=self.applying_theme_embed, view=self)
-        embed = await self.generate(layout=False)
         self.theme_applied = True
-        embed.title = "Cave Finalized"
-        await itx.followup.edit_message(self.message.id, embed=embed, view=self.as_new_view())
-        await self.remove_persistence()
+        self.finalized = True
 
-    async def generate(self, layout: bool = True):
+    async def generate(self, finalize: bool = False):
         req = CaveAPIRequest(
             seed=self.seed,
             theme=self.theme_select.value,
@@ -221,15 +248,18 @@ class CaveGeneratedView(GeneratedMapView):
             tile_size=self.tile_size,
             map_style=self.map_style_select.value,
             corridor_density=float(self.density),
+            discord_id=str(self.user_id),
             egress=float(self.egress),
-            layout=layout
+            layout=not finalize
         )
         exclude_seed = req.seed == ''
 
         dungen_response = await generate_cave(req, exclude_seed=exclude_seed)
-        self.seed = dungen_response.seed_string
-        self.download_url = dungen_response.full_image_url
-        embed = make_cave_embed(dungen_response)
+        if self.regenerated:
+            self.seed = dungen_response.seed_string
+            self.download_url = dungen_response.full_image_url
+        embed = make_cave_embed(dungen_response, finalized=self.finalized)
+        self.result_embed_cache = embed
         log.debug(str(embed))
         return embed
 
@@ -255,13 +285,17 @@ class CaveGeneratedView(GeneratedMapView):
             tile_size=self.tile_size,
             seed=self.seed,
             seed_editable=False,
+            seed_edited=self.seed_edited,
             regenerated=True,
             default_map_style=self.map_style_select.value,
             default_egress=self.egress,
             default_density=self.density,
             default_secret_rooms=self.secret_rooms_select.values,
             user_id=self.user_id,
-            theme_applied=self.theme_applied
+            guild_id=self.guild_id,
+            theme_applied=self.theme_applied,
+            finalized=self.finalized,
+            upscaled=self.upscaled
         ).dict()
 
     def as_new_view(self, **extras):

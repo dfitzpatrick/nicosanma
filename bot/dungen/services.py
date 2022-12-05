@@ -65,13 +65,15 @@ def make_response_embed(title: str, dungen_response: GeneratedAPIResponse, **kwa
     return embed
 
 
-def make_map_embed(dungen_response: DungenAPIResponse, **kwargs) -> discord.Embed:
-    embed = make_response_embed(title="Map Generated!", dungen_response=dungen_response)
+def make_map_embed(dungen_response: DungenAPIResponse, finalized: bool = False, **kwargs) -> discord.Embed:
+    action = "Finalized" if finalized else "Generated"
+    embed = make_response_embed(title=f"Map {action}!", dungen_response=dungen_response)
     return embed
 
 
-def make_cave_embed(dungen_response: CaveAPIResponse, **kwargs) -> discord.Embed:
-    embed = make_response_embed(title="Cave Generated!", dungen_response=dungen_response)
+def make_cave_embed(dungen_response: CaveAPIResponse, finalized: bool = False, **kwargs) -> discord.Embed:
+    action = "Finalized" if finalized else "Generated"
+    embed = make_response_embed(title=f"Cave {action}!", dungen_response=dungen_response)
     return embed
 
 

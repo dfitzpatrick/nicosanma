@@ -35,9 +35,10 @@ Defaults to 84855914615537664
 `SERVICE_ICON` - The icon url that appears on most embeds. (DEFAULT: 'https://dungeonchannel.com/mainimages/patreon/Patreon_Coral.jpg')
 
 `PATREON_URL` - The url link to the Patreon Account (DEFAULT: 'https://www.patreon.com/DungeonChannel')
-`
 
 `VIEW_TIMEOUT` - The time between inactivity on each map or cave before the session is disabled and not more edits can be made. Defaults to 1 day.
+
+`USE_EPHEMERAL` - Whether to send the dungen generators as a private (ephemeral) message. (DEFAULT: True)
 
 ```
 This uses a text representation to express time
