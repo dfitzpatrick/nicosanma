@@ -1,18 +1,30 @@
 from __future__ import annotations
 
+import asyncio
+import json
+from datetime import datetime, timezone, timedelta
+
 import asyncpg
+import pydantic
 from discord.ext import tasks
 import os
 
 import aiohttp
 from typing import TYPE_CHECKING, List, Any, Union, TypedDict, Dict, Optional, Tuple
 import logging
+
+from pydantic import BaseModel
+
 if TYPE_CHECKING:
     from bot.db import Pg
 
 DataKey = List[Dict[str, Any]]
 IncludedKey = List[Dict[str, Any]]
 log = logging.getLogger(__name__)
+
+PATREON_CLIENT_ID=os.environ.get('PATREON_CLIENT_ID')
+PATREON_SECRET=os.environ.get('PATREON_SECRET')
+PATREON_MANUAL_REFRESH_TOKEN=os.environ.get('PATREON_MANUAL_REFRESH_TOKEN', '')
 
 
 class MemberInfo(TypedDict):
@@ -30,6 +42,108 @@ class MemberConnection(TypedDict):
     provider_id: str
     url: Optional[str]
 
+class PatreonTokenPayload(BaseModel):
+    access_token: str
+    expires_in: int
+    token_type: str
+    scope: str
+    refresh_token: str
+    version: str
+
+class NoTokenError(Exception):
+    pass
+
+
+class PatreonToken:
+
+    def __init__(self, pg: Pg):
+        self.pg = pg
+        self.data: Optional[PatreonTokenPayload] = None
+        self.token_url = 'https://www.patreon.com/api/oauth2/token'
+        self.issued_at: Optional[datetime] = None
+        self.provider_name = 'patreon'
+
+    @property
+    def requires_refresh(self):
+        seconds_buffer = 10
+        if self.issued_at is None or self.data is None:
+            return True
+        now = datetime.now(timezone.utc)
+        return now > self.issued_at + timedelta(seconds=self.data.expires_in - seconds_buffer)
+
+    async def get_access_token(self, from_manual_refresh=False):
+        if from_manual_refresh:
+            log.debug("Grabbing from manual refresh due to flag set on get_access_token")
+            await self.refresh(PATREON_MANUAL_REFRESH_TOKEN)
+        if self.requires_refresh:
+            await self._load_stored()
+            await self.refresh(PATREON_MANUAL_REFRESH_TOKEN if self.data is None else self.data.refresh_token)
+        if self.data is None:
+            raise NoTokenError
+        log.debug(f"get_access_token data {self.data}")
+        return self.data.access_token
+
+    async def _load_stored(self) -> asyncpg.Record:
+        await asyncio.sleep(2)
+        log.debug("Loading token information from database")
+        q = "select payload, issued_at from application_tokens where provider_name = $1"
+        async with self.pg as db:
+            row = await db.connection.fetchrow(q, self.provider_name)
+            if row is not None:
+                log.debug(row)
+                try:
+                    data = json.loads(row['payload'])
+                    if 'error' not in data.keys():
+                        self.data = PatreonTokenPayload(**data)
+                        self.issued_at = row['issued_at']
+                except pydantic.ValidationError:
+                    log.debug(f"{data} is not a valid patreon Token Payload")
+
+    async def refresh(self, manual_refresh_token: Optional[str] = None, retried: bool = False):
+        refresh_token = self.data.refresh_token if manual_refresh_token is None else manual_refresh_token,
+        log.debug(f"Attempting refresh of token using refresh_token {refresh_token}")
+        payload = {
+            'grant_type': 'refresh_token',
+            'refresh_token':refresh_token,
+            'client_id': PATREON_CLIENT_ID,
+            'client_secret': PATREON_SECRET
+        }
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        log.debug(f"Calling Post to {self.token_url} headers={headers}")
+        log.debug(f"Payload: {payload}")
+        async with aiohttp.ClientSession(headers=headers) as session:
+            async with session.post(self.token_url, data=payload) as resp:
+
+                log.debug(resp)
+                data = await resp.json()
+                log.debug(data)
+                if 'error' not in data.keys():
+                    self.issued_at = datetime.now(timezone.utc)
+                    self.data = PatreonTokenPayload(**data)
+                    log.debug(f"Response: {data}")
+                    await self.save()
+                else:
+                    if retried:
+                        raise NoTokenError
+                    log.debug("Bad response from refresh request. Not saving")
+                    await self.refresh(PATREON_MANUAL_REFRESH_TOKEN, retried=True)
+
+
+    async def save(self):
+        log.debug(f"Saving response to database {self.data}")
+        q = """
+        insert into application_tokens (provider_name, payload, issued_at)
+        values ($1, $2, $3)
+        on conflict (provider_name)
+        do
+            update set payload = $2, issued_at = $3
+        """
+        async with self.pg as db:
+            serialized_data = self.data.json()
+            await db.connection.execute(q, "patreon", serialized_data, self.issued_at)
+
+
+
 
 class PatreonPoller:
 
@@ -37,6 +151,7 @@ class PatreonPoller:
         self.interval = interval
         self.pg = pg
         self.poller = tasks.loop(minutes=interval, reconnect=True)(self.poller)
+        self.token_manager = PatreonToken(pg)
 
     def start(self):
         log.info(f"Patreon Polling started. {self.interval} minute intervals")
@@ -46,17 +161,24 @@ class PatreonPoller:
         log.info("Patreon Polling stopped")
         self.poller.stop()
 
-    async def fetch_patreon_payload(self, target: str):
-        token = os.environ['PATREON_TOKEN']
+    async def fetch_patreon_payload(self, target: str, retried: bool = False):
+        token = await self.token_manager.get_access_token(from_manual_refresh=retried)
         headers = {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {token}'
         }
         log.debug(f"Patreon Polling {target}")
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(target) as response:
-                response = await response.json()
-                return response
+        try:
+            async with aiohttp.ClientSession(headers=headers) as session:
+                async with session.get(target) as response:
+                    response = await response.json()
+                    return response
+        except aiohttp.ClientResponseError:
+            await self.fetch_patreon_payload(target, retried=True)
+            if retried:
+                raise
+
+
 
     async def fetch_patreon_results(self) -> Tuple[DataKey, IncludedKey]:
         target = "https://www.patreon.com/api/oauth2/v2/campaigns/2442702/members?include=currently_entitled_tiers,user&fields%5Buser%5D=social_connections,full_name,url&fields%5Bmember%5D=patron_status&fields%5Btier%5D=title"

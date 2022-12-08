@@ -9,3 +9,5 @@ PATREON_OVERRIDE_UPSCALE = os.environ.get('PATREON_OVERRIDE_UPSCALE', '848559146
 SERVICE_NAME = os.environ.get('SERVICE_NAME', 'Dungeon Channel')
 SERVICE_ICON = os.environ.get('SERVICE_ICON', 'https://dungeonchannel.com/mainimages/patreon/Patreon_Coral.jpg"')
 PATREON_URL = os.environ.get('PATREON_URL', 'https://www.patreon.com/DungeonChannel')
+UPSCALE_TOKEN = os.environ.get('UPSCALE_TOKEN')
+

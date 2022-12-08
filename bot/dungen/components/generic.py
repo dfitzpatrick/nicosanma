@@ -71,7 +71,10 @@ class GeneratedMapView(ui.View):
             custom_id=f"{custom_id_prefix}_generated_map_size"
         )
         self.seed_edited = seed_edited
+        log.debug(f"Regenerated: {self.regenerated}")
+        log.debug(f"Seed Edited: {self.seed_edited}")
         if self.regenerated or self.seed_edited:
+            log.debug(f"Setting seed to {seed}")
             self.seed = seed
         else:
             self.seed = self.default_seed
@@ -96,6 +99,19 @@ class GeneratedMapView(ui.View):
             log.debug(f"Regenerated: {self.regenerated}")
             self.add_item(self.seed_button)
 
+    @property
+    def applying_theme_embed(self):
+        embed = discord.Embed(
+            title="Applying Your Settings",
+            description="Please wait. This may take a moment while the image generates"
+        )
+        embed.set_author(
+            name=config_constants.SERVICE_NAME,
+            url=config_constants.PATREON_URL,
+            icon_url=config_constants.SERVICE_ICON
+        )
+        return embed
+
     def add_upscale_button(self):
         label = "Upscale & Finalize"
         btn_upscale = UpscaleButton(
@@ -119,7 +135,10 @@ class GeneratedMapView(ui.View):
                 url=self.download_url,
                 row=4,
             ))
-
+    async def edit_button_status(self, disabled: bool):
+        for item in self.children:
+            item.disabled = disabled
+        await self.message.edit(embed=self.applying_theme_embed, view=self)
 
     async def send_public_embed(self):
         if self.message is None or self.message.channel is None:
@@ -134,11 +153,13 @@ class GeneratedMapView(ui.View):
         embed.timestamp = datetime.now(timezone.utc)
         channel = self.message.channel
         view = self.as_new_view()
-        # Always send finished state
-        view.finalized = True
-        view.upscaled = True
-
-        await channel.send(embed=embed, view=view.as_new_view())
+        view.result_embed_cache = self.result_embed_cache
+        message = await channel.send(embed=embed, view=view)
+        view.message = message
+        async with self.bot.db as db:
+            log.debug(f"Adding persistence to new view {view.custom_id_prefix}")
+            await view.update_persistent_view(db.connection)
+        return message
 
     def remove_children(self):
         for child in self.children:
@@ -209,7 +230,11 @@ class GeneratedMapView(ui.View):
                 # do not disable link buttons
                 child.disabled = True
         if self.message is not None:
-            await self.message.edit(view=self)
+            try:
+                await self.message.edit(view=self)
+            except discord.NotFound:
+                log.debug(f"Could not edit message {self.message.id} Message does not exist.")
+
         self.stop()
 
     def reschedule_timeout_task(self, target: Optional[datetime] = None):

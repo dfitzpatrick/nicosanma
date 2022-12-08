@@ -40,11 +40,12 @@ class DungenBot(commands.Bot):
         self.patreon_polling.start()
         async with self.db as db:
             records = await db.connection.fetch("select * from discord_persistent_views")
-        records = await self.cleanup_persistent_views(records)
+        #records = await self.cleanup_persistent_views(records)
         await self.load_persistent_views(records)
         for view in self.persistent_views:
             if hasattr(view, 'reschedule_timeout_task'):
                 view.reschedule_timeout_task()
+        asyncio.create_task(self.cleanup_persistent_views(records))
 
     def find_partial_message_from_db(self, record: Dict[str, Any]) -> Optional[discord.PartialMessage]:
         guild_id = record['guild_id']

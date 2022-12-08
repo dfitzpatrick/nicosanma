@@ -25,13 +25,17 @@ def assert_envs_exist():
         ('TOKEN', 'The Bot Token', str),
         ('DSN', 'The DSN Connection String for Postgresql without the database. Ex: postgresql://postgres:postgres@localhost:5434 ', str),
         ('PATREON_TOKEN', 'Patreon Creators Token for Background Tasks', str),
+        ('PATREON_CLIENT_ID', 'Patreon Creators Client Id for Background Tasks', str),
+        ('PATREON_SECRET', 'Patreon Creators Secret for Background Tasks', str),
+        ('UPSCALE_TOKEN', 'The Token that is passed to the DunGen API for Upscaling', str),
+
     )
 
     for e in envs:
         ident = f"{e[0]}/{e[1]}"
         value = os.environ.get(e[0])
         if value is None:
-            raise MissingConfigurationException(f"{ident} needs to be defined")
+            raise MissingConfigurationException(f"{ident} needs to be- defined")
         try:
             _ = e[2](value)
         except ValueError:

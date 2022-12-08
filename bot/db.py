@@ -23,6 +23,7 @@ async def create_db(dsn: str, database_name: str, owner: str):
 class DbProxy:
     """For later expansion"""
     def __init__(self, connection: asyncpg.Connection):
+        log.debug(connection)
         self.connection = connection
 
     def __await__(self):

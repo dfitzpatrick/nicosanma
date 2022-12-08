@@ -46,33 +46,35 @@ class GenerateButton(ui.Button):
         view: GeneratedMapView = self.view
         new_view = None
         log.debug("In GenerateButton callback")
-        try:
-            view.user_id = itx.user.id
-            view.guild_id = itx.guild_id
-            log.debug(f"View now belongs to {view.user_id}")
-            if view.regenerated:
-                await itx.response.defer(ephemeral=config_constants.USE_EPHEMERAL)
-                embed = await view.generate()
-                await itx.followup.edit_message(itx.message.id, embed=embed, view=view.as_new_view())
-            else:
-                await itx.response.defer(thinking=True, ephemeral=config_constants.USE_EPHEMERAL)
-                embed = await view.generate()
-                view = view.as_new_view(custom_id_prefix=str(uuid.uuid4()))
 
-                await itx.followup.send(embed=embed, view=view)
-                message = await itx.original_response()
-                view.message = message
-        except aiohttp.ClientResponseError:
-            view.tile_size = 70
-            await itx.followup.send(embed=client_error_embed(), ephemeral=True)
-        finally:
-            async with view.bot.db as db:
-                await view.update_persistent_view(db.connection)
+        view.user_id = itx.user.id
+        view.guild_id = itx.guild_id
+        log.debug(f"View now belongs to {view.user_id}")
+        if view.regenerated:
+            log.debug("View is regenerated")
+            await itx.response.defer(ephemeral=config_constants.USE_EPHEMERAL)
+            embed = await view.generate(finalize=view.finalized)
+            await itx.followup.edit_message(itx.message.id, embed=embed, view=view.as_new_view())
+        else:
+            log.debug("View is new instance")
+            await itx.response.defer(thinking=True, ephemeral=config_constants.USE_EPHEMERAL)
+            view = view.as_new_view(custom_id_prefix=str(uuid.uuid4()), seed=view.default_seed)
+            embed = await view.generate(finalize=view.finalized)
+            await itx.followup.send(embed=embed, view=view)
+            message = await itx.original_response()
+            view.message = message
+
+        async with view.bot.db as db:
+            await view.update_persistent_view(db.connection)
 
 
 class FinalizeButton(GenerateButton):
 
-    def __init__(self, pre_hook: Optional[Callable] = None, **kwargs):
+    def __init__(
+            self,
+            pre_hook: Optional[Callable] = None,
+            **kwargs
+    ):
         self.pre_hook = pre_hook
         super(FinalizeButton, self).__init__(**kwargs)
 
@@ -82,15 +84,19 @@ class FinalizeButton(GenerateButton):
         log.debug("In FinalizeButton callback")
         view: GeneratedMapView = self.view
         view.finalized = True
-        log.debug("Calling FInalize super")
+        log.debug("Calling Finalize super")
         await super(FinalizeButton, self).callback(itx)
         log.debug(f"Ephemeral status is {config_constants.USE_EPHEMERAL}")
         if config_constants.USE_EPHEMERAL:
             log.debug("Sending public embed")
-            await view.send_public_embed()
+            await view.remove_persistence()
+            message = await view.send_public_embed()
+            await view.message.delete()
+            # Swap to the public embed
+            view.message = message
 
-        # Although the view exists possibly for upscaling, stop tracking here.
-        await view.remove_persistence()
+
+
 
 
 class CaveFinalizeButton(FinalizeButton):
@@ -111,10 +117,16 @@ class CaveFinalizeButton(FinalizeButton):
 
 class UpscaleButton(FinalizeButton):
 
-    def __init__(self, always_allow: bool = False, **kwargs):
+    def __init__(
+            self,
+            always_allow: bool = False,
+            error_hook: Optional[Callable] = None,
+            **kwargs
+    ):
         emoji = discord.PartialEmoji.from_str("patreon_w:1045163802745905193")
         super(UpscaleButton, self).__init__(emoji=emoji, **kwargs)
         self.always_allow = always_allow
+        self.error_hook = error_hook
 
     async def can_upscale(self, discord_id: str) -> bool:
         view: GeneratedMapView = self.view
@@ -144,15 +156,19 @@ class UpscaleButton(FinalizeButton):
             await itx.response.send_message(embed=patreon_embed(color=discord.Color.red()), ephemeral=True)
             return
         try:
-            if self.pre_hook is not None:
-                await self.pre_hook(itx, self)
-            view.upscaled = True
             view.tile_size = 140
+            view.upscaled = True
             await super(UpscaleButton, self).callback(itx)
-        except aiohttp.ClientResponseError:
+            if view.upscaled and view.finalized:
+                await view.remove_persistence()
+
+        except aiohttp.ClientResponseError as e:
+            log.error("Error with web request for upscaling.", exc_info=True)
+            if self.error_hook:
+                await self.error_hook(itx, self, e)
             view.tile_size = 70
             view.upscaled = False
-            await itx.response.send_message(embed=client_error_embed(), ephemeral=True)
+            await itx.followup.send(embed=client_error_embed(), ephemeral=True)
 
 
 class CallbackModalButton(ui.Button):

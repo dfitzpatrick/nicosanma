@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 from functools import partial
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING, Any
 
 import discord
 from discord import ui
@@ -66,19 +66,44 @@ class DungenGenerateView(GeneratedMapView):
     def default_seed(self):
         return "random"
 
+    def add_upscale_button(self):
+        btn_upscale = UpscaleButton(
+            always_allow=False,
+            label="Upscale & Finalize",
+            style=discord.ButtonStyle.red,
+            row=4,
+            custom_id=f"{self.custom_id_prefix}_generated_map_upscale",
+            pre_hook=self.on_upscale,
+            error_hook=self.on_apply_error
+        )
+        self.add_item(btn_upscale)
+        return btn_upscale
+
+
+    async def on_upscale(self, itx: discord.Interaction, button: FinalizeButton):
+        await self.edit_button_status(disabled=True)
+        self.finalized = True
+
+    async def on_apply_error(self, itx: discord.Interaction, button: UpscaleButton, exception: Any):
+        await self.edit_button_status(disabled=False)
+        self.finalized = False
+        await self.message.edit(embed=self.result_embed_cache, view=self)
+
+
     async def generate(self, finalize: bool = False):
         req = DungenAPIRequest(
             seed=self.seed,
             theme=self.theme_select.value,
             max_size=self.size_select.value,
             tile_size=self.tile_size,
-            discord_id=str(self.user_id),
+            discord_id=config_constants.UPSCALE_TOKEN,
             **self.map_options.to_dict()
         )
         dungen_response = await generate_dungeon(req)
-        if self.regenerated:
-            self.seed = dungen_response.seed_string
-            self.download_url = dungen_response.full_image_url
+
+        #if self.regenerated:
+        self.seed = dungen_response.seed_string
+        self.download_url = dungen_response.full_image_url
         embed = make_map_embed(dungen_response, finalized=finalize)
         self.result_embed_cache = embed
         return embed
@@ -213,7 +238,8 @@ class CaveGeneratedView(GeneratedMapView):
             style=discord.ButtonStyle.red,
             row=4,
             custom_id=f"{self.custom_id_prefix}_generated_cave_upscale",
-            pre_hook=self.on_upscale
+            pre_hook=self.on_upscale,
+            error_hook=self.on_apply_error
         )
         self.add_item(btn_upscale)
         return btn_upscale
@@ -231,33 +257,39 @@ class CaveGeneratedView(GeneratedMapView):
     async def on_upscale(self, itx: discord.Interaction, button: FinalizeButton):
         await self.on_apply_theme(itx, button)
 
+
+
     async def on_apply_theme(self, itx: discord.Interaction, button: FinalizeButton):
         log.debug("In apply theme")
-        for item in self.children:
-            # Disable so they can see the settings still
-            item.disabled = True
-        await self.message.edit(embed=self.applying_theme_embed, view=self)
+        await self.edit_button_status(disabled=True)
         self.theme_applied = True
         self.finalized = True
 
+    async def on_apply_error(self, itx: discord.Interaction, button: UpscaleButton, exception: Any):
+        await self.edit_button_status(disabled=False)
+        await self.message.edit(embed=self.result_embed_cache, view=self)
+
+
     async def generate(self, finalize: bool = False):
+        other_options = self.secret_rooms_select.to_dict()
         req = CaveAPIRequest(
             seed=self.seed,
             theme=self.theme_select.value,
             max_size=self.size_select.value,
             tile_size=self.tile_size,
             map_style=self.map_style_select.value,
+            secret_rooms=other_options.get('secret_rooms', False),
             corridor_density=float(self.density),
-            discord_id=str(self.user_id),
+            discord_id=config_constants.UPSCALE_TOKEN,
             egress=float(self.egress),
             layout=not finalize
         )
         exclude_seed = req.seed == ''
 
         dungen_response = await generate_cave(req, exclude_seed=exclude_seed)
-        if self.regenerated:
-            self.seed = dungen_response.seed_string
-            self.download_url = dungen_response.full_image_url
+        #if self.regenerated:
+        self.seed = dungen_response.seed_string
+        self.download_url = dungen_response.full_image_url
         embed = make_cave_embed(dungen_response, finalized=self.finalized)
         self.result_embed_cache = embed
         log.debug(str(embed))

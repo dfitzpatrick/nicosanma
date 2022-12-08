@@ -51,6 +51,7 @@ class CaveAPIRequest(GeneratedAPIRequest):
     map_style: str
     corridor_density: float = 0
     egress: float = 1.0
+    secret_rooms: bool
     layout: bool = True
 
 

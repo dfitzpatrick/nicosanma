@@ -6,6 +6,13 @@
 Example: DSN=postgresql://postgres:postgres@localhost:5434
 
 `PATREON_TOKEN` - Patreon Creators Token for Background Tasks
+
+`PATREON_CLIENT_ID` - The client id for your Patreon Account
+
+`PATREON_SECRET` - The secret for your Patreon Account.
+
+`UPSCALE_TOKEN` - The Token that is passed to the DunGen API for Upscaling authentication
+
 ### Optional Environment Variables
 `PRODUCTION_DATABASE_NAME` - Postgresql Database Name for Regular Operations (Defaults to nicodb)
 
@@ -39,6 +46,8 @@ Defaults to 84855914615537664
 `VIEW_TIMEOUT` - The time between inactivity on each map or cave before the session is disabled and not more edits can be made. Defaults to 1 day.
 
 `USE_EPHEMERAL` - Whether to send the dungen generators as a private (ephemeral) message. (DEFAULT: True)
+
+`PATREON_MANUAL_REFRESH_TOKEN` - Seeds the database with a new refresh token if it is unsynced or invalid.
 
 ```
 This uses a text representation to express time
