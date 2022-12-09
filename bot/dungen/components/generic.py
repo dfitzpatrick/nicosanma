@@ -41,6 +41,8 @@ class GeneratedMapView(ui.View):
                  regenerated=False,
                  user_id: Optional[int] = None,
                  guild_id: Optional[int] = None,
+                 user_display_name: Optional[str] = None,
+                 user_avatar_url: Optional[str] = None,
                  finalized: bool = False,
                  upscaled: bool = False,
                  **kwargs
@@ -51,6 +53,8 @@ class GeneratedMapView(ui.View):
         if getattr(self, 'designation') is None:
             self.designation = 'generic'
         self.user_id = user_id
+        self.user_display_name = user_display_name
+        self.user_avatar_url = user_avatar_url
         self.guild_id = guild_id
         self.upscaled = upscaled
         self.finalized = finalized
@@ -144,12 +148,9 @@ class GeneratedMapView(ui.View):
         if self.message is None or self.message.channel is None:
             raise AttributeError("Message/Channel is not found")
         embed: discord.Embed = self.result_embed_cache or await self.generate(finalize=True)
-        if self.user_id and self.guild_id:
-            guild = self.bot.get_guild(self.guild_id)
-            if guild is not None:
-                member = guild.get_member(self.user_id)
-                if member is not None:
-                    embed.set_footer(text=f"Created by {member.display_name}", icon_url=member.display_avatar.url)
+
+        if self.user_display_name and self.user_avatar_url:
+            embed.set_footer(text=f"Created by {self.user_display_name}", icon_url=self.user_avatar_url)
         embed.timestamp = datetime.now(timezone.utc)
         channel = self.message.channel
         view = self.as_new_view()

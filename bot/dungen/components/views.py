@@ -124,6 +124,8 @@ class DungenGenerateView(GeneratedMapView):
             guild_id=self.guild_id,
             finalized=self.finalized,
             upscaled=self.upscaled,
+            user_display_name=self.user_display_name,
+            user_avatar_url=self.user_avatar_url
 
         ).dict()
 
@@ -327,7 +329,10 @@ class CaveGeneratedView(GeneratedMapView):
             guild_id=self.guild_id,
             theme_applied=self.theme_applied,
             finalized=self.finalized,
-            upscaled=self.upscaled
+            upscaled=self.upscaled,
+            user_display_name=self.user_display_name,
+            user_avatar_url=self.user_avatar_url
+
         ).dict()
 
     def as_new_view(self, **extras):

@@ -48,9 +48,9 @@ async def entry_point():
 
     pool = asyncpg.create_pool(os.environ['DSN'])
     token = os.environ['TOKEN']
-    intents = discord.Intents.default()
-    # for get_member and bot recovery on persistent views
-    intents.members = True
+    intents = discord.Intents.none()
+    intents.guilds = True
+
     bot = DungenBot(
         pg_pool=pool,
         intents=intents,

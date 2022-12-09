@@ -49,7 +49,9 @@ class GenerateButton(ui.Button):
 
         view.user_id = itx.user.id
         view.guild_id = itx.guild_id
-        log.debug(f"View now belongs to {view.user_id}")
+        view.user_display_name = itx.user.display_name
+        view.user_avatar_url = itx.user.display_avatar.url
+        log.debug(f"View now belongs to {view.user_id}/{view.user_display_name}")
         if view.regenerated:
             log.debug("View is regenerated")
             await itx.response.defer(ephemeral=config_constants.USE_EPHEMERAL)

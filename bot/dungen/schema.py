@@ -19,6 +19,8 @@ class ViewSerializable(BaseModel):
     guild_id: Optional[int] = None
     finalized: bool = False
     upscaled: bool = False
+    user_display_name: Optional[str] = None
+    user_avatar_url: Optional[str] = None
 
 
 
